@@ -12,10 +12,10 @@ the .db file is fully portable and anyone can open it with the sqlite3 CLI.
 import logging
 
 import pandas as pd
-import numpy as np
 
-from config import PROCESSED_DIR, DB_PATH, SQL_DIR, TRADING_DAYS, RISK_FREE_RATE
+from config import PROCESSED_DIR, DB_PATH, SQL_DIR
 from db import get_connection, init_schema, replace_table, load_named_queries
+from metrics import full_stats
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -54,29 +54,15 @@ def query_summary(conn) -> pd.DataFrame:
 
 
 def compute_metrics(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute annualized return, volatility, Sharpe, and max drawdown per ticker."""
+    """Compute annualized return, volatility, Sharpe/Sortino/Calmar, and max
+    drawdown per ticker, using the shared formulas in metrics.py."""
     rows = []
+    # loop per ticker so each ETF's stats are computed from only its own
+    # return history, the same reasoning as transform.py's add_returns()
     for ticker, g in df.groupby("ticker"):
         g = g.sort_values("date")
         r = g["daily_return"].dropna()
-
-        ann_return = (1 + r.mean()) ** TRADING_DAYS - 1
-        ann_vol = r.std() * np.sqrt(TRADING_DAYS)
-        sharpe = (ann_return - RISK_FREE_RATE) / ann_vol if ann_vol > 0 else np.nan
-
-        # max drawdown: largest peak-to-trough drop in cumulative return
-        cum = (1 + r).cumprod()
-        running_max = cum.cummax()
-        drawdown = (cum - running_max) / running_max
-        max_drawdown = drawdown.min()
-
-        rows.append({
-            "ticker": ticker,
-            "annual_return": round(ann_return, 4),
-            "annual_volatility": round(ann_vol, 4),
-            "sharpe_ratio": round(sharpe, 3),
-            "max_drawdown": round(max_drawdown, 4),
-        })
+        rows.append({"ticker": ticker, **full_stats(r)})
     return pd.DataFrame(rows).sort_values("sharpe_ratio", ascending=False)
 
 

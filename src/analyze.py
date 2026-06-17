@@ -14,8 +14,9 @@ import logging
 import pandas as pd
 import numpy as np
 
-from config import PROCESSED_DIR, OUTPUT_DIR, DB_PATH, TRADING_DAYS, RISK_FREE_RATE
+from config import PROCESSED_DIR, OUTPUT_DIR, DB_PATH
 from db import get_connection, init_schema, replace_table, upsert_rows
+from metrics import full_stats
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -71,23 +72,11 @@ def equal_weight_portfolio(wide: pd.DataFrame) -> dict:
     n = wide.shape[1]
     weights = np.repeat(1 / n, n)
     port_daily = wide.dot(weights)
-
-    ann_return = (1 + port_daily.mean()) ** TRADING_DAYS - 1
-    ann_vol = port_daily.std() * np.sqrt(TRADING_DAYS)
-    sharpe = (ann_return - RISK_FREE_RATE) / ann_vol
-
-    cum = (1 + port_daily).cumprod()
-    drawdown = (cum - cum.cummax()) / cum.cummax()
-    max_dd = drawdown.min()
-
     weights_dict = dict(zip(wide.columns, weights.round(4).tolist()))
 
     return {
         "strategy": "equal_weight",
-        "annual_return": round(ann_return, 4),
-        "annual_volatility": round(ann_vol, 4),
-        "sharpe_ratio": round(sharpe, 3),
-        "max_drawdown": round(max_dd, 4),
+        **full_stats(port_daily),
         "weights_json": json.dumps(weights_dict),
     }
 
