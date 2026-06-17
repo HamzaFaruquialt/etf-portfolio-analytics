@@ -1,20 +1,32 @@
-"""Stage 1: pull historical daily price data for the ETF basket via yfinance."""
+"""
+Stage 1 — Ingestion.
+
+Pulls daily historical price history for the ETF basket from Yahoo Finance via
+yfinance. This is the only stage that talks to an external data source, so it's
+kept small and isolated: every downstream stage works off the CSV this writes,
+not off a live API call, which means the rest of the pipeline is reproducible
+even if Yahoo Finance is unavailable or the data changes.
+"""
 
 import argparse
-from pathlib import Path
+import logging
 
 import pandas as pd
 import yfinance as yf
 
-TICKERS = ["SPY", "QQQ", "IWM", "EFA", "AGG", "GLD", "VNQ", "EEM"]
+from config import RAW_DIR, START_DATE, END_DATE, TICKERS
 
-RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 
 def fetch_ticker(ticker: str, start: str, end: str) -> pd.DataFrame:
+    """Download one ETF's daily OHLCV history and tag every row with its ticker."""
     df = yf.download(ticker, start=start, end=end, auto_adjust=False, progress=False)
     if df.empty:
         raise ValueError(f"No data returned for {ticker}")
+    # yfinance returns a MultiIndex column header when given a single ticker;
+    # collapse it back to plain column names like "close", "volume", etc.
     df.columns = df.columns.get_level_values(0)
     df = df.reset_index().rename(columns=str.lower)
     df.insert(0, "ticker", ticker)
@@ -22,17 +34,18 @@ def fetch_ticker(ticker: str, start: str, end: str) -> pd.DataFrame:
 
 
 def fetch_all(tickers: list[str], start: str, end: str) -> pd.DataFrame:
+    """Download every ticker in the basket and stack them into one long table."""
     frames = []
     for ticker in tickers:
-        print(f"Fetching {ticker}...")
+        logger.info(f"Fetching {ticker}...")
         frames.append(fetch_ticker(ticker, start, end))
     return pd.concat(frames, ignore_index=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Download daily ETF price history.")
-    parser.add_argument("--start", default="2014-01-01")
-    parser.add_argument("--end", default="2024-01-01")
+    parser.add_argument("--start", default=START_DATE)
+    parser.add_argument("--end", default=END_DATE)
     parser.add_argument("--tickers", nargs="+", default=TICKERS)
     args = parser.parse_args()
 
@@ -41,7 +54,7 @@ def main():
 
     out_path = RAW_DIR / "prices_raw.csv"
     combined.to_csv(out_path, index=False)
-    print(f"Saved {len(combined):,} rows for {combined['ticker'].nunique()} tickers to {out_path}")
+    logger.info(f"Saved {len(combined):,} rows for {combined['ticker'].nunique()} tickers to {out_path}")
 
 
 if __name__ == "__main__":

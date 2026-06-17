@@ -1,15 +1,24 @@
-"""Stage 3: load processed data into a SQLite database and run analytics queries."""
+"""
+Stage 3 — Database load & summary analytics.
 
-from pathlib import Path
+Loads the cleaned, return-enriched data into a SQLite database (etf.db) and
+computes the headline risk/return metrics per ticker: annualized return,
+annualized volatility, Sharpe ratio, and max drawdown. SQLite is used instead of
+a hosted database because the whole point of this stage is to demonstrate real
+SQL querying (joins, aggregation, window functions) without needing a server —
+the .db file is fully portable and anyone can open it with the sqlite3 CLI.
+"""
+
+import logging
 import sqlite3
+
 import pandas as pd
 import numpy as np
 
-PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "etf.db"
+from config import PROCESSED_DIR, DB_PATH, TRADING_DAYS, RISK_FREE_RATE
 
-TRADING_DAYS = 252
-RISK_FREE_RATE = 0.02  # 2% annual, assumption for Sharpe ratio
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 
 def load_processed() -> pd.DataFrame:
@@ -77,17 +86,17 @@ def main():
     df = load_processed()
     conn = build_database(df)
 
-    print("\n--- SQL summary query ---")
+    logger.info("\n--- SQL summary query ---")
     summary = query_summary(conn)
-    print(summary.to_string(index=False))
+    logger.info("\n%s", summary.to_string(index=False))
 
-    print("\n--- Risk / return metrics ---")
+    logger.info("\n--- Risk / return metrics ---")
     metrics = compute_metrics(df)
-    print(metrics.to_string(index=False))
+    logger.info("\n%s", metrics.to_string(index=False))
 
     # save metrics back into the database as its own table
     metrics.to_sql("metrics", conn, if_exists="replace", index=False)
-    print(f"\nSaved metrics table to {DB_PATH}")
+    logger.info(f"\nSaved metrics table to {DB_PATH}")
 
     conn.close()
 

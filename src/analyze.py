@@ -1,16 +1,23 @@
-"""Stage 4: correlation matrix and a simple equal-weight portfolio analysis."""
+"""
+Stage 4 — Correlation & naive portfolio analysis.
 
-from pathlib import Path
+Computes the pairwise correlation of daily returns across the basket (the key
+diversification signal: low/negative correlation between holdings is what
+makes a multi-asset portfolio less risky than its individual pieces) and builds
+a naive equal-weight (1/N) portfolio as a baseline to compare the optimized
+portfolios from Stage 8 against.
+"""
+
+import logging
 import sqlite3
+
 import pandas as pd
 import numpy as np
 
-PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "outputs"
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "etf.db"
+from config import PROCESSED_DIR, OUTPUT_DIR, DB_PATH, TRADING_DAYS, RISK_FREE_RATE
 
-TRADING_DAYS = 252
-RISK_FREE_RATE = 0.02
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 
 def load_processed() -> pd.DataFrame:
@@ -19,18 +26,32 @@ def load_processed() -> pd.DataFrame:
 
 
 def returns_matrix(df: pd.DataFrame) -> pd.DataFrame:
-    """Pivot into a date x ticker table of daily returns."""
+    """Pivot into a date x ticker table of daily returns.
+
+    dropna() keeps only dates where every ticker has a return, so correlation
+    and portfolio math are computed on a fair, fully-overlapping sample rather
+    than silently comparing mismatched date ranges.
+    """
     wide = df.pivot(index="date", columns="ticker", values="daily_return")
     return wide.dropna()
 
 
 def correlation_matrix(wide: pd.DataFrame) -> pd.DataFrame:
-    """Correlation of daily returns between every pair of ETFs."""
+    """Correlation of daily returns between every pair of ETFs.
+
+    Values near 1 mean two ETFs move together (little diversification benefit
+    from holding both); values near 0 or negative mean they move independently
+    or oppositely, which is exactly what reduces blended portfolio risk.
+    """
     return wide.corr().round(3)
 
 
 def equal_weight_portfolio(wide: pd.DataFrame) -> dict:
-    """Build an equal-weight portfolio and compute its stats."""
+    """Build a naive 1/N portfolio (equal dollars in every ticker) and compute its stats.
+
+    This is the baseline an "optimized" allocation (Stage 8) needs to beat to
+    prove the optimization actually adds value over just picking equal weights.
+    """
     n = wide.shape[1]
     weights = np.repeat(1 / n, n)
     port_daily = wide.dot(weights)
@@ -56,22 +77,22 @@ def main():
     df = load_processed()
     wide = returns_matrix(df)
 
-    print("--- Correlation matrix ---")
+    logger.info("--- Correlation matrix ---")
     corr = correlation_matrix(wide)
-    print(corr.to_string())
+    logger.info("\n%s", corr.to_string())
     corr.to_csv(OUTPUT_DIR / "correlation_matrix.csv")
 
-    print("\n--- Equal-weight portfolio ---")
+    logger.info("\n--- Equal-weight portfolio ---")
     port = equal_weight_portfolio(wide)
     for k, v in port.items():
-        print(f"{k}: {v}")
+        logger.info(f"{k}: {v}")
 
     # save portfolio stats and write correlation into the db
     conn = sqlite3.connect(DB_PATH)
     corr.to_sql("correlation", conn, if_exists="replace")
     pd.DataFrame([port]).to_sql("portfolio", conn, if_exists="replace", index=False)
     conn.close()
-    print(f"\nSaved correlation + portfolio tables to {DB_PATH}")
+    logger.info(f"\nSaved correlation + portfolio tables to {DB_PATH}")
 
 
 if __name__ == "__main__":

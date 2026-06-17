@@ -1,23 +1,35 @@
-"""Stage 5 prep: export database tables to CSVs for the BI dashboard."""
+"""
+Stage 5 — Dashboard export.
 
-from pathlib import Path
+Dumps every analytical table out of the SQLite database into plain CSVs, so the
+BI tool (Tableau Public) never has to query SQLite directly — it just reads flat
+files. Keeping this as its own stage means the dashboard's data source is
+decoupled from the database engine; the export list grows as later stages
+(optimization, simulation, backtest) add new tables.
+"""
+
+import logging
 import sqlite3
+
 import pandas as pd
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "etf.db"
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data" / "outputs"
+from config import DB_PATH, OUTPUT_DIR
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
+
+TABLES = ["prices", "metrics", "correlation", "portfolio"]
 
 
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
 
-    tables = ["prices", "metrics", "correlation", "portfolio"]
-    for t in tables:
+    for t in TABLES:
         df = pd.read_sql_query(f"SELECT * FROM {t};", conn)
         out = OUTPUT_DIR / f"{t}.csv"
         df.to_csv(out, index=False)
-        print(f"Exported {t}: {len(df):,} rows -> {out}")
+        logger.info(f"Exported {t}: {len(df):,} rows -> {out}")
 
     conn.close()
 

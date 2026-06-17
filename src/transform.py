@@ -1,13 +1,22 @@
-"""Stage 2: clean raw ETF data and compute returns + rolling metrics."""
+"""
+Stage 2 — Cleaning & feature engineering.
 
-from pathlib import Path
+Turns the raw OHLCV dump from ingest.py into the table every later stage builds
+on: one row per (ticker, date) with daily return, cumulative return, and rolling
+volatility already computed. Doing this once here means Stage 3 onward never has
+to re-derive returns from raw prices, so there's a single source of truth for
+"what is SPY's return on this date."
+"""
+
+import logging
+
 import pandas as pd
 import numpy as np
 
-RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
-PROCESSED_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
+from config import RAW_DIR, PROCESSED_DIR, TRADING_DAYS, ROLLING_VOL_WINDOW
 
-TRADING_DAYS = 252  # approx trading days in a year, used to annualize
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 
 def load_raw() -> pd.DataFrame:
@@ -31,15 +40,23 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
 def add_returns(df: pd.DataFrame) -> pd.DataFrame:
     """Add daily returns and rolling volatility per ticker."""
     out = []
+    # Loop per ticker, not over the whole table at once, so that returns are
+    # always computed within one ETF's own price history. Without this, the
+    # last price of one ticker could get differenced against the first price
+    # of the next ticker in the table, producing a meaningless "return."
     for ticker, g in df.groupby("ticker"):
         g = g.sort_values("date").copy()
-        # daily simple return
+        # daily simple return: (today's price / yesterday's price) - 1
         g["daily_return"] = g["adj_close"].pct_change()
-        # cumulative growth of $1 invested at the start
+        # cumulative growth of $1 invested at the start — this is what you'd
+        # plot to compare how $1 in SPY grew vs. $1 in GLD over the same period
         g["cumulative_return"] = (1 + g["daily_return"]).cumprod()
-        # 21-day (1 month) rolling volatility, annualized
-        g["rolling_vol_21d"] = (
-            g["daily_return"].rolling(21).std() * np.sqrt(TRADING_DAYS)
+        # rolling volatility over the trailing window (~1 trading month),
+        # scaled by sqrt(trading days/year) to express it as an annualized
+        # figure — the standard convention so vol numbers are comparable
+        # across tickers and against the annualized return later on
+        g[f"rolling_vol_{ROLLING_VOL_WINDOW}d"] = (
+            g["daily_return"].rolling(ROLLING_VOL_WINDOW).std() * np.sqrt(TRADING_DAYS)
         )
         out.append(g)
     return pd.concat(out, ignore_index=True)
@@ -49,21 +66,20 @@ def main():
     PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
     df = load_raw()
-    print(f"Loaded {len(df):,} raw rows")
+    logger.info(f"Loaded {len(df):,} raw rows")
 
     df = clean(df)
-    print(f"After cleaning: {len(df):,} rows, {df['ticker'].nunique()} tickers")
+    logger.info(f"After cleaning: {len(df):,} rows, {df['ticker'].nunique()} tickers")
 
     df = add_returns(df)
-    print(f"Added returns. Columns: {list(df.columns)}")
+    logger.info(f"Added returns. Columns: {list(df.columns)}")
 
     out_path = PROCESSED_DIR / "prices_processed.csv"
     df.to_csv(out_path, index=False)
-    print(f"Saved processed data to {out_path}")
+    logger.info(f"Saved processed data to {out_path}")
 
     # quick sanity check: show first few rows of one ticker
-    print("\nSample (SPY):")
-    print(df[df["ticker"] == "SPY"].head())
+    logger.info("\nSample (SPY):\n%s", df[df["ticker"] == "SPY"].head())
 
 
 if __name__ == "__main__":
