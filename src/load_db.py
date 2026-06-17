@@ -10,12 +10,12 @@ the .db file is fully portable and anyone can open it with the sqlite3 CLI.
 """
 
 import logging
-import sqlite3
 
 import pandas as pd
 import numpy as np
 
-from config import PROCESSED_DIR, DB_PATH, TRADING_DAYS, RISK_FREE_RATE
+from config import PROCESSED_DIR, DB_PATH, SQL_DIR, TRADING_DAYS, RISK_FREE_RATE
+from db import get_connection, init_schema, replace_table, load_named_queries
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -27,13 +27,11 @@ def load_processed() -> pd.DataFrame:
 
 
 def build_database(df: pd.DataFrame):
-    """Write the prices table into a fresh SQLite database."""
-    conn = sqlite3.connect(DB_PATH)
-    df.to_sql("prices", conn, if_exists="replace", index=False)
-    # an index speeds up queries that filter by ticker
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_ticker ON prices(ticker);")
-    conn.commit()
-    print(f"Loaded {len(df):,} rows into 'prices' table at {DB_PATH}")
+    """Create the schema (if needed) and load the prices table."""
+    conn = get_connection()
+    init_schema(conn)
+    replace_table(conn, "prices", df)
+    logger.info(f"Loaded {len(df):,} rows into 'prices' table at {DB_PATH}")
     return conn
 
 
@@ -90,13 +88,26 @@ def main():
     summary = query_summary(conn)
     logger.info("\n%s", summary.to_string(index=False))
 
-    logger.info("\n--- Risk / return metrics ---")
+    logger.info("\n--- Risk / return metrics (pandas) ---")
     metrics = compute_metrics(df)
     logger.info("\n%s", metrics.to_string(index=False))
 
     # save metrics back into the database as its own table
-    metrics.to_sql("metrics", conn, if_exists="replace", index=False)
+    replace_table(conn, "metrics", metrics)
     logger.info(f"\nSaved metrics table to {DB_PATH}")
+
+    # Run the window-function analytics from sql/queries.sql so the database
+    # is doing real analytical work, not just storing what pandas already
+    # computed.
+    queries = load_named_queries(SQL_DIR / "queries.sql")
+
+    logger.info("\n--- SQL: Sharpe leaderboard (RANK() window function) ---")
+    leaderboard = pd.read_sql_query(queries["sharpe_leaderboard"], conn)
+    logger.info("\n%s", leaderboard.to_string(index=False))
+
+    logger.info("\n--- SQL: max drawdown via window functions (cross-check vs. pandas) ---")
+    sql_drawdown = pd.read_sql_query(queries["max_drawdown_via_window_functions"], conn)
+    logger.info("\n%s", sql_drawdown.to_string(index=False))
 
     conn.close()
 

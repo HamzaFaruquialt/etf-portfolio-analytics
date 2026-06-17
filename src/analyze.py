@@ -8,13 +8,14 @@ a naive equal-weight (1/N) portfolio as a baseline to compare the optimized
 portfolios from Stage 8 against.
 """
 
+import json
 import logging
-import sqlite3
 
 import pandas as pd
 import numpy as np
 
 from config import PROCESSED_DIR, OUTPUT_DIR, DB_PATH, TRADING_DAYS, RISK_FREE_RATE
+from db import get_connection, init_schema, replace_table, upsert_rows
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -46,6 +47,21 @@ def correlation_matrix(wide: pd.DataFrame) -> pd.DataFrame:
     return wide.corr().round(3)
 
 
+def tidy_correlation(corr: pd.DataFrame) -> pd.DataFrame:
+    """Melt the wide correlation matrix into long form (ticker_a, ticker_b, correlation).
+
+    The database stores this in tidy form (one row per pair) rather than as a
+    wide pivot, since a wide table's column count would depend on how many
+    tickers are in the universe — see sql/schema.sql for the reasoning.
+    """
+    long = (
+        corr.reset_index()
+        .rename(columns={"ticker": "ticker_a"})
+        .melt(id_vars="ticker_a", var_name="ticker_b", value_name="correlation")
+    )
+    return long[["ticker_a", "ticker_b", "correlation"]]
+
+
 def equal_weight_portfolio(wide: pd.DataFrame) -> dict:
     """Build a naive 1/N portfolio (equal dollars in every ticker) and compute its stats.
 
@@ -64,11 +80,15 @@ def equal_weight_portfolio(wide: pd.DataFrame) -> dict:
     drawdown = (cum - cum.cummax()) / cum.cummax()
     max_dd = drawdown.min()
 
+    weights_dict = dict(zip(wide.columns, weights.round(4).tolist()))
+
     return {
+        "strategy": "equal_weight",
         "annual_return": round(ann_return, 4),
         "annual_volatility": round(ann_vol, 4),
         "sharpe_ratio": round(sharpe, 3),
         "max_drawdown": round(max_dd, 4),
+        "weights_json": json.dumps(weights_dict),
     }
 
 
@@ -87,10 +107,14 @@ def main():
     for k, v in port.items():
         logger.info(f"{k}: {v}")
 
-    # save portfolio stats and write correlation into the db
-    conn = sqlite3.connect(DB_PATH)
-    corr.to_sql("correlation", conn, if_exists="replace")
-    pd.DataFrame([port]).to_sql("portfolio", conn, if_exists="replace", index=False)
+    conn = get_connection()
+    init_schema(conn)
+    # correlation is owned entirely by this stage, so a full replace is safe
+    replace_table(conn, "correlation", tidy_correlation(corr))
+    # portfolio is shared with optimize.py (Stage 8), which adds its own rows
+    # for the max-Sharpe and min-variance strategies — upsert so this run
+    # never deletes rows another stage already wrote
+    upsert_rows(conn, "portfolio", pd.DataFrame([port]))
     conn.close()
     logger.info(f"\nSaved correlation + portfolio tables to {DB_PATH}")
 
