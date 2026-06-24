@@ -1,113 +1,121 @@
 # ETF Portfolio Analytics & Strategy Dashboard
 
-A self-contained pipeline that pulls 10 years of daily price history for an
-8-ETF, multi-asset-class basket, builds a SQL database around it, and answers
-the questions an allocator actually cares about: how risky is each holding,
-how much do they diversify each other, what's the best mix of them, how bad
-could a bad day get, and would an optimized allocation have actually held up
-if you'd run it in real time rather than with hindsight.
+I wanted to actually test the stuff you learn in a finance class instead of
+just taking it on faith — does diversification really lower your risk, is
+"optimizing" a portfolio actually better than just splitting your money
+evenly, and how much could you realistically lose on a bad day? So I built a
+small pipeline that pulls 10 years of daily price data for 8 ETFs covering
+different asset classes (US stocks, tech, small-cap, international, bonds,
+gold, real estate, emerging markets), loads it into a SQL database, and runs
+the math myself instead of trusting a textbook answer.
 
-## What this answers
+## What it actually does
 
-- **Which holdings are pulling their weight?** Risk-adjusted return (Sharpe,
-  Sortino, Calmar), not just raw return, per ETF.
-- **How much does diversification actually help here?** Pairwise correlation
-  across the basket, and the volatility reduction from blending all 8 versus
-  holding any one.
-- **What's the best mix of these 8 holdings?** A Markowitz mean-variance
-  optimization — minimum-variance and maximum-Sharpe portfolios, plus the
-  full efficient frontier between them.
-- **How bad could tomorrow be?** Monte Carlo and historical-bootstrap
-  Value-at-Risk / Conditional VaR on the optimized portfolio.
-- **Would the optimization have actually worked, or is it hindsight bias?**
-  A walk-forward backtest that rebalances annually using only data available
-  at the time, scored out-of-sample against equal-weight and SPY benchmarks.
+1. **Pulls the data.** 10 years of daily prices for SPY, QQQ, IWM, EFA, AGG,
+   GLD, VNQ, and EEM from Yahoo Finance.
+2. **Cleans it up and computes returns.** Daily returns, cumulative growth,
+   rolling volatility — the stuff everything else is built on.
+3. **Loads it into SQLite** with a real schema (not just pandas dumping a
+   table) and runs some of the analysis directly in SQL — a Sharpe ratio
+   leaderboard and a max-drawdown calculation done with window functions,
+   which I then double-checked against the pandas version to make sure they
+   actually agree.
+4. **Checks how much each ETF moves with the others.** This is the
+   diversification question — if two ETFs move together, holding both
+   doesn't really lower your risk.
+5. **Finds the "best" portfolio mix.** Using Markowitz optimization (the
+   actual math behind "don't put all your eggs in one basket"), I solve for
+   the lowest-risk mix and the best risk-adjusted-return mix of these 8 ETFs.
+6. **Asks "how bad could it get?"** Monte Carlo simulation and a
+   historical-resampling method to estimate how much the portfolio could
+   lose on a rough day (Value-at-Risk / Conditional VaR).
+7. **Tests whether the optimization would've actually worked in real life.**
+   This is the part I think matters most — instead of just optimizing on all
+   10 years of data and declaring victory (which is cheating, since you'd
+   never have known the future), I re-run the optimization every year using
+   only the data available up to that point, and see how it would've
+   actually performed going forward.
 
-## Key findings
+## What I found (the interesting part)
 
-- **QQQ had the best individual risk-adjusted return** of the 8 holdings —
-  0.862 Sharpe over 2014-2023 — but **blending it with GLD pushed Sharpe
-  higher still, to 0.886**, in a 67%/33% optimized mix. Diversification beat
-  picking the single best performer.
-- **GLD is the strongest diversifier in the basket**, with a 0.016
-  correlation to SPY (essentially zero) versus SPY/QQQ's 0.929 — two ETFs
-  that are nearly redundant for risk-reduction purposes despite being
-  different tickers.
-- **The naive equal-weight portfolio (1/8 in everything) already cut
-  volatility below 6 of the 8 individual holdings** (13.7% vs. up to 22.1%
-  for IWM) — diversification working exactly as the theory predicts, with no
-  optimization required.
-- **The honest result: out-of-sample, the optimized portfolio didn't actually
-  win.** A walk-forward backtest — re-optimizing annually using only the
-  trailing 2 years of data, never peeking ahead — put the optimized
-  strategy's Sharpe at 0.573, tied with equal-weight (0.573) and behind plain
-  SPY buy-and-hold (0.712). This tracks the well-known critique of
-  mean-variance optimization: weights fit to trailing history pick up noise
-  in that window more than anything durable. Worth stating plainly rather
-  than only reporting the rosier in-sample numbers above.
-- **Tail risk is fatter than a normal distribution assumes.** Historical
-  bootstrap 99% CVaR came in ~45-50% worse than the parametric Monte Carlo
-  estimate for both the equal-weight and max-Sharpe portfolios — the
-  portfolios have lost more on their worst days than a normal-distribution
-  model would predict.
+- **QQQ was the best single ETF on a risk-adjusted basis** (Sharpe ratio of
+  0.862), but mixing it with gold (GLD) pushed that even higher, to 0.886, in
+  a 67% QQQ / 33% GLD split. So diversification beat just picking the best
+  performer — which is exactly the point of doing this instead of guessing.
+- **Gold is basically the only real diversifier in this basket.** Its
+  correlation with SPY is 0.016 — practically zero. Meanwhile SPY and QQQ
+  move together almost perfectly (0.929 correlation), so holding both
+  doesn't actually spread your risk much, even though they're "different"
+  ETFs.
+- **Just splitting your money evenly across all 8 ETFs already lowered
+  volatility below 6 of the 8 individual holdings**, with zero optimization,
+  zero analysis, just owning a bit of everything. That's diversification
+  doing its job for free.
+- **Here's the part that actually surprised me, and I think is the most
+  honest finding in the whole project:** when I tested the "optimized"
+  portfolio the way you'd actually have to use it — re-optimizing every year
+  using only past data, no peeking ahead — it didn't beat a simple
+  equal-weight portfolio, and it lost to just buying SPY and holding it
+  (Sharpe of 0.573 for the optimized strategy vs. 0.573 for equal-weight vs.
+  0.712 for SPY). The optimization looks great when you let it see the whole
+  10 years at once, but that's hindsight. Tested honestly, it didn't hold up.
+  This is actually a well-known issue with this kind of optimization — it
+  tends to fit noise in whatever recent data it's given rather than finding
+  something that holds up going forward — and I'd rather show that I found
+  it and understand why, than pretend the optimization was a clean win.
+- **The "how bad could it get" numbers were worse than a normal bell-curve
+  model predicts.** When I estimated worst-case losses using real historical
+  data instead of assuming returns follow a clean statistical distribution,
+  the worst-case losses came in about 45-50% higher. Markets have fatter
+  tails than the simple math assumes.
 
-## Architecture
+## How it's built
 
 ```
-ingest.py      -- pull 10y daily OHLCV for 8 ETFs from Yahoo Finance
-   |
-transform.py   -- clean prices, compute daily/cumulative returns, rolling vol
-   |
-load_db.py     -- load into SQLite (typed schema), per-ticker risk metrics,
-   |              SQL window-function analytics (Sharpe leaderboard,
-   |              SQL-side drawdown cross-check)
-   |
-analyze.py     -- correlation matrix, naive equal-weight portfolio
-   |
-optimize.py    -- Markowitz efficient frontier: min-variance & max-Sharpe
-   |              portfolios via scipy.optimize
-   |
-simulate.py    -- Monte Carlo + historical-bootstrap VaR/CVaR
-   |
-backtest.py    -- walk-forward backtest: optimized vs equal-weight vs SPY
-   |
-export.py      -- dump every analytical table to CSV for the BI dashboard
+ingest.py      -> pull 10 years of daily prices for the 8 ETFs
+transform.py   -> clean it, compute daily/cumulative returns, rolling vol
+load_db.py     -> load into SQLite, compute per-ETF risk stats, run the
+                  SQL-side analytics (leaderboard + drawdown check)
+analyze.py     -> correlation between ETFs, the naive equal-weight portfolio
+optimize.py    -> the actual portfolio optimization (min-risk & max-Sharpe)
+simulate.py    -> Monte Carlo + historical VaR/CVaR
+backtest.py    -> the "would this have actually worked" walk-forward test
+export.py      -> dumps everything to CSV for the dashboard
 ```
 
-Each stage reads the previous stage's output and writes its own — `ingest.py`
-is the only one that touches the network, so everything downstream is
-reproducible from the cached CSVs without hitting Yahoo Finance again.
+Each script reads what the one before it produced and writes its own output,
+so the whole thing runs top to bottom. Only `ingest.py` actually hits the
+internet — everything after that works off the saved data, so I'm not
+re-downloading from Yahoo Finance every time I tweak something.
 
-## Tech stack
+## Built with
 
-- **Python** (pandas, numpy, scipy) — data pipeline and optimization
-- **SQLite** — typed schema (`sql/schema.sql`), window-function analytics
-  (`sql/queries.sql`): a Sharpe-ratio leaderboard via `RANK()`, and a
-  max-drawdown calculation done entirely in SQL via cumulative log-return
-  window functions, cross-checked against the pandas calculation
-- **yfinance** — market data source
-- **Tableau Public** — dashboard (link below, once built)
+- **Python** (pandas, numpy, scipy) for the data work and the optimization
+- **SQLite** for storage, but also for real analysis — see `sql/schema.sql`
+  and `sql/queries.sql` for the actual SQL doing work, not just storing what
+  pandas already computed
+- **yfinance** to pull the market data
+- **Tableau Public** (dashboard in progress)
 
-## Methodology & assumptions
+## The assumptions I made, so you can judge the numbers fairly
 
-- **Universe:** SPY, QQQ, IWM, EFA, AGG, GLD, VNQ, EEM — 8 ETFs spanning US
-  large-cap, tech, small-cap, developed international, US bonds, gold, real
-  estate, and emerging markets. 2014-01-01 through 2024-01-01, daily.
-- **Risk-free rate:** 2% annual, used in every Sharpe/Sortino calculation.
-- **Annualization:** 252 trading days/year; returns compounded
-  ((1+mean)^252 - 1), not just multiplied, for reported performance figures.
-  The optimizer itself works on simple (non-compounded) annualized mean/
-  covariance, the standard Markowitz convention.
-- **Optimization constraints:** long-only, fully invested (weights ≥ 0,
-  sum to 1) — this models a retail/analyst portfolio, not a fund with
-  shorting or leverage.
-- **Backtest rebalancing:** annual, using a trailing 2-year lookback window
-  that ends strictly before each rebalance date.
-- **VaR/CVaR:** 1-day horizon, 95%/99% confidence, computed two ways
-  (parametric Monte Carlo and historical bootstrap) so the normal-
-  distribution assumption can be checked against what actually happened.
+- **The 8 ETFs and date range:** SPY, QQQ, IWM, EFA, AGG, GLD, VNQ, EEM, daily
+  data from 2014-01-01 to 2024-01-01.
+- **Risk-free rate:** 2% a year, used anywhere I calculate Sharpe or Sortino.
+- **252 trading days a year** for annualizing things, and I compound returns
+  (not just multiply) when reporting performance — the optimizer itself uses
+  simple annualized averages internally, which is the standard way this kind
+  of optimization is actually done.
+- **No shorting, no leverage.** Every portfolio has to be fully invested with
+  non-negative weights — basically, this models a normal person's portfolio,
+  not a hedge fund.
+- **The backtest rebalances once a year**, using only the trailing 2 years of
+  data available at that point — never anything from the future.
+- **VaR/CVaR is a 1-day estimate** at 95% and 99% confidence, calculated two
+  different ways on purpose, so I could compare a "clean math" assumption
+  against what actually happened historically.
 
-## Running it
+## Running it yourself
 
 ```bash
 python -m venv .venv
@@ -125,16 +133,15 @@ python backtest.py
 python export.py
 ```
 
-All outputs land in `data/outputs/` as CSVs, and the full analytical history
-is queryable directly from `data/etf.db` with the `sqlite3` CLI or any SQL
-client.
+Everything ends up in `data/outputs/` as CSVs, and you can also just open
+`data/etf.db` directly with the `sqlite3` CLI (or any SQL tool) and poke
+around the tables yourself.
 
 ## Dashboard
 
-*Tableau Public link: coming soon.*
+*Tableau Public link going here once it's built.*
 
-## What's next
+---
 
-Test coverage and CI are still being added, along with a single-command
-pipeline runner — this project is being built in stages over several days
-rather than all at once.
+Still adding tests, CI, and a one-command pipeline runner — building this in
+stages over a few days rather than all at once.
