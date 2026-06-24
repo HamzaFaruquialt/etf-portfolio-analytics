@@ -1,7 +1,7 @@
 # ETF Portfolio Analytics & Strategy Dashboard
 
 I wanted to actually test the stuff you learn in a finance class instead of
-just taking it on faith — does diversification really lower your risk, is
+just believing what I learned blindly. Does diversification really lower your risk, is
 "optimizing" a portfolio actually better than just splitting your money
 evenly, and how much could you realistically lose on a bad day? So I built a
 small pipeline that pulls 10 years of daily price data for 8 ETFs covering
@@ -16,20 +16,20 @@ the math myself instead of trusting a textbook answer.
 2. **Cleans it up and computes returns.** Daily returns, cumulative growth,
    rolling volatility — the stuff everything else is built on.
 3. **Loads it into SQLite** with a real schema (not just pandas dumping a
-   table) and runs some of the analysis directly in SQL — a Sharpe ratio
-   leaderboard and a max-drawdown calculation done with window functions,
+   table) and runs some of the analysis directly in SQL. This includes a Sharpe
+   ratio leaderboard and a max-drawdown calculation done with window functions,
    which I then double-checked against the pandas version to make sure they
    actually agree.
-4. **Checks how much each ETF moves with the others.** This is the
-   diversification question — if two ETFs move together, holding both
+5. **Checks how much each ETF moves with the others.** This is the
+   diversification question, if two ETFs move together, holding both
    doesn't really lower your risk.
-5. **Finds the "best" portfolio mix.** Using Markowitz optimization (the
+6. **Finds the "best" portfolio mix.** Using Markowitz optimization (the
    actual math behind "don't put all your eggs in one basket"), I solve for
    the lowest-risk mix and the best risk-adjusted-return mix of these 8 ETFs.
-6. **Asks "how bad could it get?"** Monte Carlo simulation and a
+7. **Asks "how bad could it get?"** Monte Carlo simulation and a
    historical-resampling method to estimate how much the portfolio could
    lose on a rough day (Value-at-Risk / Conditional VaR).
-7. **Tests whether the optimization would've actually worked in real life.**
+8. **Tests whether the optimization would've actually worked in real life.**
    This is the part I think matters most — instead of just optimizing on all
    10 years of data and declaring victory (which is cheating, since you'd
    never have known the future), I re-run the optimization every year using
@@ -40,10 +40,10 @@ the math myself instead of trusting a textbook answer.
 
 - **QQQ was the best single ETF on a risk-adjusted basis** (Sharpe ratio of
   0.862), but mixing it with gold (GLD) pushed that even higher, to 0.886, in
-  a 67% QQQ / 33% GLD split. So diversification beat just picking the best
-  performer — which is exactly the point of doing this instead of guessing.
+  a 67% QQQ / 33% GLD split. So diversification beats just picking the best
+  performer, which is exactly the point of doing this instead of guessing.
 - **Gold is basically the only real diversifier in this basket.** Its
-  correlation with SPY is 0.016 — practically zero. Meanwhile SPY and QQQ
+  correlation with SPY is 0.016 — practically zero. Meanwhile, SPY and QQQ
   move together almost perfectly (0.929 correlation), so holding both
   doesn't actually spread your risk much, even though they're "different"
   ETFs.
