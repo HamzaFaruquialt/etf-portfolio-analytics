@@ -1,10 +1,11 @@
 """
-Shared settings for the ETF analytics pipeline.
+Stage 6 — Shared config.
 
-Every other module imports its constants from here instead of redefining them.
-Centralizing them means a single change (e.g. adding a ticker, or revisiting the
-risk-free rate assumption) propagates everywhere automatically, and there's one
-place to look when debugging "why did this number change."
+Not a pipeline step itself (it doesn't read or write any data) — every other
+stage imports its constants from here instead of redefining them. Centralizing
+them means a single change (e.g. adding a ticker, or revisiting the risk-free
+rate assumption) propagates everywhere automatically, and there's one place
+to look when debugging "why did this number change."
 """
 
 from pathlib import Path

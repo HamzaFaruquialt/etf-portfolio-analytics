@@ -41,7 +41,7 @@ def returns_matrix(df: pd.DataFrame) -> pd.DataFrame:
 def correlation_matrix(wide: pd.DataFrame) -> pd.DataFrame:
     """Correlation of daily returns between every pair of ETFs.
 
-    Values near 1 mean two ETFs move together (little diversification benefit
+    Values near 1(perfectly correlated) mean two ETFs move together (little diversification benefit
     from holding both); values near 0 or negative mean they move independently
     or oppositely, which is exactly what reduces blended portfolio risk.
     """
@@ -49,7 +49,7 @@ def correlation_matrix(wide: pd.DataFrame) -> pd.DataFrame:
 
 
 def tidy_correlation(corr: pd.DataFrame) -> pd.DataFrame:
-    """Melt the wide correlation matrix into long form (ticker_a, ticker_b, correlation).
+    """Transform the wide correlation matrix into long form (ticker_a, ticker_b, correlation).
 
     The database stores this in tidy form (one row per pair) rather than as a
     wide pivot, since a wide table's column count would depend on how many

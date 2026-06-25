@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def fetch_ticker(ticker: str, start: str, end: str) -> pd.DataFrame:
     """Download one ETF's daily OHLCV history and tag every row with its ticker."""
-    df = yf.download(ticker, start=start, end=end, auto_adjust=False, progress=False)
+    df = yf.download(ticker, start=start, end=end, auto_adjust=False, progress=False) # unadjusted prices are more useful for backtesting
     if df.empty:
         raise ValueError(f"No data returned for {ticker}")
     # yfinance returns a MultiIndex column header when given a single ticker;
@@ -39,7 +39,7 @@ def fetch_all(tickers: list[str], start: str, end: str) -> pd.DataFrame:
     for ticker in tickers:
         logger.info(f"Fetching {ticker}...")
         frames.append(fetch_ticker(ticker, start, end))
-    return pd.concat(frames, ignore_index=True)
+    return pd.concat(frames, ignore_index=True) # don't merge indexes, just stack the rows
 
 
 def main():

@@ -1,11 +1,10 @@
 """
 Stage 2 — Cleaning & feature engineering.
 
-Turns the raw OHLCV dump from ingest.py into the table every later stage builds
+Turns the raw OHLCV dump from ingest.py into the table. Every later stage builds
 on: one row per (ticker, date) with daily return, cumulative return, and rolling
 volatility already computed. Doing this once here means Stage 3 onward never has
-to re-derive returns from raw prices, so there's a single source of truth for
-"what is SPY's return on this date."
+to re-derive returns from raw prices, which is a common source of bugs and inconsistencies.
 """
 
 import logging
@@ -31,7 +30,7 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
     df = df.sort_values(["ticker", "date"]).reset_index(drop=True)
     # keep adjusted close as our price of record
     df = df[["ticker", "date", "adj close", "volume"]]
-    df = df.rename(columns={"adj close": "adj_close"})
+    df = df.rename(columns={"adj close": "adj_close"})  # for clean convention
     # drop any rows with missing prices
     df = df.dropna(subset=["adj_close"])
     return df
@@ -52,7 +51,7 @@ def add_returns(df: pd.DataFrame) -> pd.DataFrame:
         # plot to compare how $1 in SPY grew vs. $1 in GLD over the same period
         g["cumulative_return"] = (1 + g["daily_return"]).cumprod()
         # rolling volatility over the trailing window (~1 trading month),
-        # scaled by sqrt(trading days/year) to express it as an annualized
+        # scaled by sqrt 252(trading days/year) to express it as an annualized
         # figure — the standard convention so vol numbers are comparable
         # across tickers and against the annualized return later on
         g[f"rolling_vol_{ROLLING_VOL_WINDOW}d"] = (

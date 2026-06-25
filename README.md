@@ -72,16 +72,25 @@ the math myself instead of trusting a textbook answer.
 ## How it's built
 
 ```
-ingest.py      -> pull 10 years of daily prices for the 8 ETFs
-transform.py   -> clean it, compute daily/cumulative returns, rolling vol
-load_db.py     -> load into SQLite, compute per-ETF risk stats, run the
-                  SQL-side analytics (leaderboard + drawdown check)
-analyze.py     -> correlation between ETFs, the naive equal-weight portfolio
-optimize.py    -> the actual portfolio optimization (min-risk & max-Sharpe)
-simulate.py    -> Monte Carlo + historical VaR/CVaR
-backtest.py    -> the "would this have actually worked" walk-forward test
-export.py      -> dumps everything to CSV for the dashboard
+Stage 1  ingest.py      -> pull 10 years of daily prices for the 8 ETFs
+Stage 2  transform.py   -> clean it, compute daily/cumulative returns, rolling vol
+Stage 3  load_db.py     -> load into SQLite, compute per-ETF risk stats, run the
+                           SQL-side analytics (leaderboard + drawdown check)
+Stage 4  analyze.py     -> correlation between ETFs, the naive equal-weight portfolio
+Stage 6  config.py      -> shared constants every stage imports (no pipeline I/O of its own)
+Stage 7  db.py +         -> shared SQLite helpers + the typed schema and window-function
+         sql/*.sql          queries that Stage 3 runs
+Stage 8  optimize.py    -> the actual portfolio optimization (min-risk & max-Sharpe)
+Stage 9  simulate.py    -> Monte Carlo + historical VaR/CVaR
+Stage 10 backtest.py    -> the "would this have actually worked" walk-forward test
+Stage 5  export.py      -> dumps everything to CSV for the dashboard
 ```
+
+Stages 6 and 7 aren't steps you run in order like the rest — they're shared
+plumbing (config values, database helpers/schema) that Stages 3 onward all
+import. Stage numbers otherwise match the order things actually run in: 1
+through 4, then 8, 9, 10, then 5 (export) last, once everything else exists
+to export.
 
 Each script reads what the one before it produced and writes its own output,
 so the whole thing runs top to bottom. Only `ingest.py` actually hits the

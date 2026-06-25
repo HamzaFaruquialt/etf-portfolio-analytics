@@ -1,5 +1,5 @@
 -- ============================================================================
--- ETF Portfolio Analytics — database schema
+-- Stage 7 — Database schema
 -- ============================================================================
 -- Tables with a predictable, fixed shape (prices, metrics, correlation,
 -- portfolio summaries) are declared here with real column types and primary

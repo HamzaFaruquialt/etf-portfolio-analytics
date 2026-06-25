@@ -1,10 +1,12 @@
 """
-Shared SQLite helpers used by every stage that reads or writes etf.db.
+Stage 7 — Shared database helpers.
 
-Centralizing connection/schema/table-write logic here means each pipeline
-stage just calls these functions instead of re-implementing "open a
-connection, make sure the schema exists, write a table" every time, and there
-is one place to fix it if the database layer needs to change.
+Not a pipeline step itself — introduced alongside sql/schema.sql and
+sql/queries.sql so every stage that touches etf.db (load_db.py, analyze.py,
+optimize.py, simulate.py, backtest.py) calls the same connection/schema/
+table-write functions instead of each reinventing "open a connection, make
+sure the schema exists, write a table." One place to fix it if the database
+layer needs to change.
 """
 
 import re

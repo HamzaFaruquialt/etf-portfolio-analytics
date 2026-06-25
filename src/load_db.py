@@ -5,8 +5,8 @@ Loads the cleaned, return-enriched data into a SQLite database (etf.db) and
 computes the headline risk/return metrics per ticker: annualized return,
 annualized volatility, Sharpe ratio, and max drawdown. SQLite is used instead of
 a hosted database because the whole point of this stage is to demonstrate real
-SQL querying (joins, aggregation, window functions) without needing a server —
-the .db file is fully portable and anyone can open it with the sqlite3 CLI.
+SQL querying (joins, aggregation, window functions) without needing a server.
+The .db file is fully portable and anyone can open it with the sqlite3 CLI.
 """
 
 import logging

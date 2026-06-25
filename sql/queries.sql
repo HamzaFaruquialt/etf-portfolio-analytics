@@ -1,5 +1,5 @@
 -- ============================================================================
--- ETF Portfolio Analytics — analytical queries
+-- Stage 7 — Analytical queries (window functions)
 -- ============================================================================
 -- Each query below is addressed by name from Python via
 -- db.load_named_queries(), so this file can be read top-to-bottom like a
