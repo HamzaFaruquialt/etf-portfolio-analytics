@@ -1,10 +1,10 @@
 # ETF Portfolio Analytics & Strategy Dashboard
 
-**▶ Live dashboard: https://hamzafaruquialt.github.io/etf-portfolio-analytics/**
+**Live dashboard: https://hamzafaruquialt.github.io/etf-portfolio-analytics/**
 
 I wanted to actually test the stuff you get taught in a finance class instead of just taking it on faith. Does diversification really lower your risk? Is "optimizing" a portfolio actually better than just splitting your money evenly? And how much could you realistically lose on a bad day? So instead of trusting the textbook answer, I built a pipeline that pulls 10 years of daily prices for 8 ETFs across different asset classes, loads it into a SQL database, and runs the math myself to find out.
 
-The 8 ETFs cover US large-cap (SPY), tech (QQQ), small-cap (IWM), international (EFA), bonds (AGG), gold (GLD), real estate (VNQ), and emerging markets (EEM) — basically a spread of everything a normal multi-asset portfolio would hold.
+The 8 ETFs cover US large-cap (SPY), tech (QQQ), small-cap (IWM), international (EFA), bonds (AGG), gold (GLD), real estate (VNQ), and emerging markets (EEM), basically a spread of everything a normal multi-asset portfolio would hold.
 
 ## What it actually does
 
