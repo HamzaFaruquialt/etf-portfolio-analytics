@@ -152,5 +152,4 @@ around the tables yourself.
 
 ---
 
-Still adding tests, CI, and a one-command pipeline runner — building this in
-stages over a few days rather than all at once.
+Added tests, CI, and a one-command pipeline runner: python pipeline.py
