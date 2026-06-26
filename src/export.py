@@ -18,7 +18,43 @@ from config import DB_PATH, OUTPUT_DIR
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-TABLES = ["prices", "metrics", "correlation", "portfolio"]
+TABLES = [
+    "prices",
+    "metrics",
+    "correlation",
+    "portfolio",
+    "optimization_frontier",
+    "var_results",
+    "backtest_results",
+    "backtest_summary",
+]
+
+
+def build_risk_return_summary(conn: sqlite3.Connection) -> pd.DataFrame:
+    """Combine per-ticker metrics and portfolio-level stats into one tidy
+    table with a shared set of columns.
+
+    This is what the dashboard's risk-return scatter plots directly -- it
+    puts the 8 individual ETFs and the 3 portfolio strategies (equal-weight,
+    min-variance, max-Sharpe) on the same chart, same axes, so you can see at
+    a glance whether the optimized portfolios actually sit in a better
+    risk-return position than any single holding.
+    """
+    metrics = pd.read_sql_query(
+        "SELECT ticker AS entity, annual_return, annual_volatility, sharpe_ratio, "
+        "sortino_ratio, calmar_ratio, max_drawdown FROM metrics",
+        conn,
+    )
+    metrics["category"] = "ETF"
+
+    portfolio = pd.read_sql_query(
+        "SELECT strategy AS entity, annual_return, annual_volatility, sharpe_ratio, "
+        "sortino_ratio, calmar_ratio, max_drawdown FROM portfolio",
+        conn,
+    )
+    portfolio["category"] = "Portfolio"
+
+    return pd.concat([metrics, portfolio], ignore_index=True)
 
 
 def main():
@@ -30,6 +66,11 @@ def main():
         out = OUTPUT_DIR / f"{t}.csv"
         df.to_csv(out, index=False)
         logger.info(f"Exported {t}: {len(df):,} rows -> {out}")
+
+    risk_return = build_risk_return_summary(conn)
+    out = OUTPUT_DIR / "risk_return_summary.csv"
+    risk_return.to_csv(out, index=False)
+    logger.info(f"Exported risk_return_summary: {len(risk_return):,} rows -> {out}")
 
     conn.close()
 
