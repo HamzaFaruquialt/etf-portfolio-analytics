@@ -42,12 +42,16 @@ def fetch_all(tickers: list[str], start: str, end: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) # don't merge indexes, just stack the rows
 
 
-def main():
+def main(argv=None):
+    """argv defaults to None so running `python ingest.py --start ...` reads
+    real CLI args, but pipeline.py can call main(argv=[]) to get the config
+    defaults without ingest.py trying to parse pipeline.py's own arguments.
+    """
     parser = argparse.ArgumentParser(description="Download daily ETF price history.")
     parser.add_argument("--start", default=START_DATE)
     parser.add_argument("--end", default=END_DATE)
     parser.add_argument("--tickers", nargs="+", default=TICKERS)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     combined = fetch_all(args.tickers, args.start, args.end)
