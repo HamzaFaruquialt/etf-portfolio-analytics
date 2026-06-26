@@ -72,10 +72,9 @@ assemble them into one dashboard and publish to Tableau Public.
 
 ## 6. Optimized allocation (bar or pie)
 
-- **Source:** `portfolio.csv` (`weights_json` column needs to be parsed —
-  Tableau can't read embedded JSON directly, so use Tableau Prep, a quick
-  Python/pandas script, or `json_normalize` before exporting to flatten
-  `weights_json` into one row per ticker per strategy first)
+- **Source:** `portfolio_weights.csv` (tidy long form: `strategy`, `ticker`,
+  `weight` — already flattened out of `portfolio.csv`'s `weights_json`
+  column by `export.py`, no Tableau-side parsing needed)
 - **Build:** Bar chart, one bar group per `strategy`, bars within each group
   = ticker weights. (A grouped bar chart reads more clearly than 3 separate
   pies for comparing 3 strategies side by side.)

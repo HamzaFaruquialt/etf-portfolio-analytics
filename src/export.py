@@ -8,6 +8,7 @@ decoupled from the database engine; the export list grows as later stages
 (optimization, simulation, backtest) add new tables.
 """
 
+import json
 import logging
 import sqlite3
 
@@ -57,6 +58,24 @@ def build_risk_return_summary(conn: sqlite3.Connection) -> pd.DataFrame:
     return pd.concat([metrics, portfolio], ignore_index=True)
 
 
+def build_portfolio_weights(conn: sqlite3.Connection) -> pd.DataFrame:
+    """Flatten the `weights_json` column on the `portfolio` table into one
+    row per (strategy, ticker, weight).
+
+    weights_json exists as JSON in the database because the number of
+    tickers is a config parameter, not a fixed schema (see sql/schema.sql) --
+    but Tableau can't parse embedded JSON, so this tidy long-form table is
+    what the allocation chart actually reads.
+    """
+    portfolio = pd.read_sql_query("SELECT strategy, weights_json FROM portfolio", conn)
+    rows = []
+    for _, row in portfolio.iterrows():
+        weights = json.loads(row["weights_json"])
+        for ticker, weight in weights.items():
+            rows.append({"strategy": row["strategy"], "ticker": ticker, "weight": weight})
+    return pd.DataFrame(rows)
+
+
 def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -71,6 +90,11 @@ def main():
     out = OUTPUT_DIR / "risk_return_summary.csv"
     risk_return.to_csv(out, index=False)
     logger.info(f"Exported risk_return_summary: {len(risk_return):,} rows -> {out}")
+
+    weights = build_portfolio_weights(conn)
+    out = OUTPUT_DIR / "portfolio_weights.csv"
+    weights.to_csv(out, index=False)
+    logger.info(f"Exported portfolio_weights: {len(weights):,} rows -> {out}")
 
     conn.close()
 
