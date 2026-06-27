@@ -1,6 +1,7 @@
 ETF Portfolio Analytics & Strategy Dashboard
 
 Live web dashboard (full deep-dive): https://hamzafaruquialt.github.io/etf-portfolio-analytics/
+
 Tableau Public (concise view): https://public.tableau.com/views/ETFPortfolioAnalyticsDashboard/Dashboard1
 
 I wanted to actually test the stuff you get taught in a finance class instead of just taking it on faith. Does diversification really lower your risk? Is "optimizing" a portfolio actually better than just splitting your money evenly? And how much could you realistically lose on a bad day? So instead of trusting the textbook answer, I built a pipeline that pulls 10 years of daily prices for 8 ETFs across different asset classes, loads it into a SQL database, and runs the math myself to find out.
